@@ -155,16 +155,22 @@ lanplus_encrypt_aes_cbc_128(const uint8_t * iv,
 							uint8_t       * output,
 							uint32_t        * bytes_written)
 {
-	EVP_CIPHER_CTX ctx;
-	EVP_CIPHER_CTX_init(&ctx);
-	EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, iv);
-	EVP_CIPHER_CTX_set_padding(&ctx, 0);
+	EVP_CIPHER_CTX* ctx;
+	ctx = EVP_CIPHER_CTX_new();
+	if (ctx == NULL){
+		return;
+	}
+	EVP_CIPHER_CTX_init(ctx);
+	EVP_EncryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv);
+	EVP_CIPHER_CTX_set_padding(ctx, 0);
 	
 
 	*bytes_written = 0;
 
-	if (input_length == 0)
+	if (input_length == 0){
+	        EVP_CIPHER_CTX_free(ctx);
 		return;
+	}
 
 	if (verbose >= 5)
 	{
@@ -182,28 +188,32 @@ lanplus_encrypt_aes_cbc_128(const uint8_t * iv,
 	assert((input_length % IPMI_CRYPT_AES_CBC_128_BLOCK_SIZE) == 0);
 
 
-	if(!EVP_EncryptUpdate(&ctx, output, (int *)bytes_written, input, input_length))
+	if(!EVP_EncryptUpdate(ctx, output, (int *)bytes_written, input, input_length))
 	{
 		/* Error */
 		*bytes_written = 0;
+	        EVP_CIPHER_CTX_free(ctx);
 		return;
 	}
 	else
 	{
 		uint32_t tmplen;
 
-		if(!EVP_EncryptFinal_ex(&ctx, output + *bytes_written, (int *)&tmplen))
+		if(!EVP_EncryptFinal_ex(ctx, output + *bytes_written, (int *)&tmplen))
 		{
 			*bytes_written = 0;
+	        	EVP_CIPHER_CTX_free(ctx);
 			return; /* Error */
 		}
 		else
 		{
 			/* Success */
 			*bytes_written += tmplen;
-			EVP_CIPHER_CTX_cleanup(&ctx);
+			EVP_CIPHER_CTX_cleanup(ctx);
 		}
 	}
+	
+	EVP_MD_CTX_free(ctx);
 }
 
 
@@ -230,10 +240,13 @@ lanplus_decrypt_aes_cbc_128(const uint8_t * iv,
 							uint8_t       * output,
 							uint32_t        * bytes_written)
 {
-	EVP_CIPHER_CTX ctx;
-	EVP_CIPHER_CTX_init(&ctx);
-	EVP_DecryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, iv);
-	EVP_CIPHER_CTX_set_padding(&ctx, 0);
+	EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+	if (ctx == NULL){
+		return;
+	}
+	EVP_CIPHER_CTX_init(ctx);
+	EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, iv);
+	EVP_CIPHER_CTX_set_padding(ctx, 0);
 
 
 	if (verbose >= 5)
@@ -246,9 +259,10 @@ lanplus_decrypt_aes_cbc_128(const uint8_t * iv,
 
 	*bytes_written = 0;
 
-	if (input_length == 0)
+	if (input_length == 0){
+		EVP_CIPHER_CTX_free(ctx);	
 		return;
-
+	}
 	/*
 	 * The default implementation adds a whole block of padding if the input
 	 * data is perfectly aligned.  We would like to keep that from happening.
@@ -257,31 +271,33 @@ lanplus_decrypt_aes_cbc_128(const uint8_t * iv,
 	assert((input_length % IPMI_CRYPT_AES_CBC_128_BLOCK_SIZE) == 0);
 
 
-	if (!EVP_DecryptUpdate(&ctx, output, (int *)bytes_written, input, input_length))
+	if (!EVP_DecryptUpdate(ctx, output, (int *)bytes_written, input, input_length))
 	{
 		/* Error */
 		lprintf(LOG_DEBUG, "ERROR: decrypt update failed");
 		*bytes_written = 0;
+		EVP_CIPHER_CTX_free(ctx);	
 		return;
 	}
 	else
 	{
 		uint32_t tmplen;
 
-		if (!EVP_DecryptFinal_ex(&ctx, output + *bytes_written, (int *)&tmplen))
+		if (!EVP_DecryptFinal_ex(ctx, output + *bytes_written, (int *)&tmplen))
 		{
 			char buffer[1000];
 			ERR_error_string(ERR_get_error(), buffer);
 			lprintf(LOG_DEBUG, "the ERR error %s", buffer);
 			lprintf(LOG_DEBUG, "ERROR: decrypt final failed");
 			*bytes_written = 0;
+			EVP_CIPHER_CTX_free(ctx);	
 			return; /* Error */
 		}
 		else
 		{
 			/* Success */
 			*bytes_written += tmplen;
-			EVP_CIPHER_CTX_cleanup(&ctx);
+			EVP_CIPHER_CTX_cleanup(ctx);
 		}
 	}
 
@@ -290,4 +306,5 @@ lanplus_decrypt_aes_cbc_128(const uint8_t * iv,
 		lprintf(LOG_DEBUG, "Decrypted %d encrypted bytes", input_length);
 		printbuf(output, *bytes_written, "Decrypted this data");
 	}
+	EVP_CIPHER_CTX_free(ctx);	
 }
